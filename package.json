@@ -1,0 +1,17 @@
+{
+  "name": "discovery-hub-api",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3001",
+    "build": "next build",
+    "start": "next start --port 3001"
+  },
+  "dependencies": {
+    "next": "^14.2.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@supabase/supabase-js": "^2.43.0",
+    "@anthropic-ai/sdk": "^0.24.0"
+  }
+}

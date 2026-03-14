@@ -1,0 +1,94 @@
+import { NextResponse } from 'next/server'
+import { createServerClient } from '@/lib/supabase'
+import { authenticateRequest, logSession } from '@/lib/auth'
+import { generateDigest } from '@/lib/digest'
+
+export async function POST(request) {
+  const auth = authenticateRequest(request)
+  if (!auth.authenticated) return auth.response
+  if (auth.preflight) return new NextResponse(null, { status: 204 })
+
+  const body = await request.json()
+  const supabase = createServerClient()
+
+  // Accept both camelCase and snake_case
+  const pick = (camel, snake) => body[camel] ?? body[snake] ?? null
+  const record = {
+    date: body.date || new Date().toISOString().split('T')[0],
+    interviewer: body.interviewer,
+    interviewee_name: pick('intervieweeName', 'interviewee_name'),
+    company: body.company,
+    role: body.role,
+    department: body.department,
+    company_size: pick('companySize', 'company_size'),
+    channels: body.channels || [],
+    distributors: body.distributors,
+    connection_source: pick('connectionSource', 'connection_source'),
+    workflow_steps: pick('workflowSteps', 'workflow_steps'),
+    systems_tools: pick('systemsTools', 'systems_tools'),
+    data_sources: pick('dataSources', 'data_sources'),
+    handoffs: body.handoffs,
+    time_spent: pick('timeSpent', 'time_spent'),
+    workarounds: body.workarounds,
+    pain_points: pick('painPoints', 'pain_points'),
+    tools_evaluated: pick('toolsEvaluated', 'tools_evaluated'),
+    why_failed: pick('whyFailed', 'why_failed'),
+    current_spend: pick('currentSpend', 'current_spend'),
+    budget_authority: pick('budgetAuthority', 'budget_authority'),
+    willingness_to_pay: pick('willingnessToPay', 'willingness_to_pay'),
+    integration_reqs: pick('integrationReqs', 'integration_reqs'),
+    verbatim_quotes: pick('verbatimQuotes', 'verbatim_quotes'),
+    observations: body.observations,
+    surprises: body.surprises,
+    follow_ups: pick('followUps', 'follow_ups'),
+    intel_vs_judgement: pick('intelVsJudgement', 'intel_vs_judgement') ?? 50,
+    outsourced_vs_insourced: pick('outsourcedVsInsourced', 'outsourced_vs_insourced'),
+    autopilot_vs_copilot: pick('autopilotVsCopilot', 'autopilot_vs_copilot'),
+    biggest_signal: pick('biggestSignal', 'biggest_signal'),
+    confidence: body.confidence || 3,
+    score_founder_fit: body.scores?.founderFit ?? pick('scoreFounderFit', 'score_founder_fit') ?? 0,
+    score_lowest_friction: body.scores?.lowestFriction ?? pick('scoreLowestFriction', 'score_lowest_friction') ?? 0,
+    score_clearest_value: body.scores?.clearestValue ?? pick('scoreClearestValue', 'score_clearest_value') ?? 0,
+    score_defensibility: body.scores?.defensibility ?? pick('scoreDefensibility', 'score_defensibility') ?? 0,
+    score_ease_de_risk: body.scores?.easeDeRisk ?? pick('scoreEaseDeRisk', 'score_ease_de_risk') ?? 0,
+    score_stickiness: body.scores?.stickiness ?? pick('scoreStickiness', 'score_stickiness') ?? 0,
+    notes: body.notes,
+  }
+
+  // Remove null values so Supabase uses defaults
+  Object.keys(record).forEach(k => { if (record[k] === null || record[k] === undefined) delete record[k] })
+
+  let result
+  if (body.id) {
+    result = await supabase.from('interviews').update(record).eq('id', body.id).select().single()
+  } else {
+    result = await supabase.from('interviews').insert(record).select().single()
+  }
+
+  if (result.error) return NextResponse.json({ error: result.error.message }, { status: 400 })
+
+  await logSession(supabase, {
+    author: record.interviewer || 'unknown',
+    action: body.id ? 'updated_interview' : 'created_interview',
+    entity_type: 'interview',
+    entity_id: result.data.id,
+    summary: `${body.id ? 'Updated' : 'New'} interview: ${record.company} / ${record.interviewee_name}`
+  })
+
+  generateDigest({ trigger_type: 'auto', requested_by: record.interviewer }).catch(console.error)
+  return NextResponse.json({ success: true, data: result.data })
+}
+
+export async function GET(request) {
+  const auth = authenticateRequest(request)
+  if (!auth.authenticated) return auth.response
+
+  const supabase = createServerClient()
+  const { data, error } = await supabase.from('interviews').select('*').order('date', { ascending: false })
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  return NextResponse.json({ data })
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204 })
+}
