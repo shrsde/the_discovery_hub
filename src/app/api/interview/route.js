@@ -53,6 +53,7 @@ export async function POST(request) {
     score_ease_de_risk: body.scores?.easeDeRisk ?? pick('scoreEaseDeRisk', 'score_ease_de_risk') ?? 0,
     score_stickiness: body.scores?.stickiness ?? pick('scoreStickiness', 'score_stickiness') ?? 0,
     notes: body.notes,
+    workflow_graph: pick('workflowGraph', 'workflow_graph'),
   }
 
   // Remove null values so Supabase uses defaults
