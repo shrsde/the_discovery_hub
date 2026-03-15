@@ -15,21 +15,23 @@ export async function POST(request) {
     const supabase = createServerClient()
 
     // Pull all data
-    const [interviews, feed, syncs] = await Promise.all([
+    const [interviews, feed, syncs, attachments, meetings] = await Promise.all([
       supabase.from('interviews').select('*').order('date', { ascending: false }),
       supabase.from('feed').select('*').order('created_at', { ascending: false }),
       supabase.from('syncs').select('*').order('created_at', { ascending: false }),
+      supabase.from('attachments').select('*').order('created_at', { ascending: false }),
+      supabase.from('meetings').select('*').order('created_at', { ascending: false }),
     ])
 
     // Build context for Claude
-    const context = buildContext(interviews.data || [], feed.data || [], syncs.data || [])
+    const context = buildContext(interviews.data || [], feed.data || [], syncs.data || [], attachments.data || [], meetings.data || [])
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 2000,
-      system: `You are a search assistant for a CPG discovery research database. You have access to the full database of interviews, feed posts, and sync entries.
+      system: `You are a search assistant for a CPG discovery research database. You have access to the full database of interviews, feed posts, sync entries, file attachments, and meeting transcripts.
 
 When answering queries:
 - Be specific — cite company names, interviewee names, dates, and exact quotes when relevant
@@ -74,7 +76,7 @@ When answering queries:
   }
 }
 
-function buildContext(interviews, feed, syncs) {
+function buildContext(interviews, feed, syncs, attachments = [], meetings = []) {
   let out = ''
 
   if (interviews.length) {
@@ -118,6 +120,28 @@ Content: ${s.content || '(none)'}
     out += '=== FEED ===\n\n'
     feed.forEach(f => {
       out += `[ID: ${f.id}] [${f.created_at}] ${f.author} (${f.type}): ${f.text}\n`
+    })
+  }
+
+  if (attachments.length) {
+    out += '\n=== ATTACHMENTS ===\n\n'
+    attachments.forEach(a => {
+      out += `[ID: ${a.id}] File: ${a.file_name} (${a.file_type}) — attached to interview ${a.interview_id}
+${a.summary ? `Summary: ${a.summary}` : ''}
+${a.parsed_text ? `Content: ${a.parsed_text.slice(0, 500)}` : ''}
+
+`
+    })
+  }
+
+  if (meetings.length) {
+    out += '\n=== MEETINGS ===\n\n'
+    meetings.forEach(m => {
+      out += `[ID: ${m.id}] ${m.title} — ${m.organizer} (${m.status}, ${m.created_at?.split('T')[0]})
+${m.parsed_summary ? `Summary: ${m.parsed_summary}` : ''}
+${m.transcript ? `Transcript: ${m.transcript.slice(0, 1000)}` : ''}
+
+`
     })
   }
 
