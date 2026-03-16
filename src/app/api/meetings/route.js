@@ -24,12 +24,14 @@ export async function POST(request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
   // Also post to feed
-  await supabase.from('feed').insert({
-    author: record.organizer,
-    type: 'meeting',
-    text: `Scheduled meeting: ${record.title}`,
-    tags: record.attendees,
-  }).catch(() => {})
+  try {
+    await supabase.from('feed').insert({
+      author: record.organizer,
+      type: 'meeting',
+      text: `Scheduled meeting: ${record.title}`,
+      tags: record.attendees,
+    })
+  } catch (e) { console.error('Feed post failed:', e) }
 
   await logSession(supabase, {
     author: record.organizer,

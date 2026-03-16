@@ -72,6 +72,12 @@ export async function PATCH(request) {
   const updates = {}
   if (body.pinned !== undefined) updates.pinned = body.pinned
   if (body.archived !== undefined) updates.archived = body.archived
+  if (body.summary !== undefined) updates.summary = body.summary
+  if (body.text !== undefined) {
+    updates.text = body.text
+    updates.edited_at = new Date().toISOString()
+  }
+  if (body.type !== undefined) updates.type = body.type
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
