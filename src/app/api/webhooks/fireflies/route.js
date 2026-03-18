@@ -1,12 +1,29 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
 import Anthropic from '@anthropic-ai/sdk'
+import { createHmac } from 'crypto'
+
+// Verify Fireflies webhook signature
+function verifySignature(payload, signature) {
+  const secret = process.env.FIREFLIES_WEBHOOK_SECRET
+  if (!secret) return true // Skip verification if no secret configured
+  if (!signature) return false
+  const computed = createHmac('sha256', secret).update(payload).digest('hex')
+  return computed === signature
+}
 
 // Fireflies webhook — called when transcription is complete
-// No auth check — Fireflies calls this directly
 export async function POST(request) {
   try {
-    const body = await request.json()
+    const rawBody = await request.text()
+    const signature = request.headers.get('x-hub-signature')
+
+    if (!verifySignature(rawBody, signature)) {
+      console.error('Fireflies webhook: invalid signature')
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+    }
+
+    const body = JSON.parse(rawBody)
     const { meetingId, eventType } = body
 
     console.log('Fireflies webhook received:', { meetingId, eventType })
