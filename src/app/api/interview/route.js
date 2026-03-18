@@ -54,6 +54,9 @@ export async function POST(request) {
     score_stickiness: body.scores?.stickiness ?? pick('scoreStickiness', 'score_stickiness') ?? 0,
     notes: body.notes,
     workflow_graph: pick('workflowGraph', 'workflow_graph'),
+    status: body.status || 'completed',
+    scheduled_at: pick('scheduledAt', 'scheduled_at'),
+    meet_link: pick('meetLink', 'meet_link'),
   }
 
   // Remove null values so Supabase uses defaults
@@ -90,6 +93,34 @@ export async function GET(request) {
   return NextResponse.json({ data })
 }
 
+export async function DELETE(request) {
+  const auth = authenticateRequest(request)
+  if (!auth.authenticated) return auth.response
+  if (auth.preflight) return new NextResponse(null, { status: 204 })
+
+  const { id, ids } = await request.json()
+  const supabase = createServerClient()
+
+  if (ids && ids.length > 0) {
+    const { error } = await supabase.from('interviews').delete().in('id', ids)
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  } else if (id) {
+    const { error } = await supabase.from('interviews').delete().eq('id', id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  } else {
+    return NextResponse.json({ error: 'Missing id or ids' }, { status: 400 })
+  }
+
+  return NextResponse.json({ success: true })
+}
+
 export async function OPTIONS() {
-  return new NextResponse(null, { status: 204 })
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  })
 }
