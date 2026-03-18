@@ -38,6 +38,26 @@ export async function POST(request) {
     generateDigest({ trigger_type: 'auto', requested_by: record.author }).catch(console.error)
   }
 
+  // Send email notifications for @mentions
+  if (record.tags && record.tags.length > 0) {
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ? request.url.split('/api/')[0] : ''
+      await fetch(`${baseUrl || 'http://localhost:3001'}/api/notify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': request.headers.get('authorization') || '',
+        },
+        body: JSON.stringify({
+          tags: record.tags,
+          author: record.author,
+          text: record.text,
+          type: record.type,
+        }),
+      })
+    } catch (e) { console.error('Notification failed:', e) }
+  }
+
   return NextResponse.json({ success: true, data })
 }
 
