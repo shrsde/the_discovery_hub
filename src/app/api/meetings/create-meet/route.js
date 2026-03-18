@@ -4,13 +4,13 @@ import { authenticateRequest } from '@/lib/auth'
 
 async function getGoogleTokens(supabase) {
   const { data } = await supabase
-    .from('sessions')
-    .select('summary')
-    .eq('id', '00000000-0000-0000-0000-000000000001')
+    .from('settings')
+    .select('value')
+    .eq('key', 'google_tokens')
     .single()
 
-  if (!data?.summary) return null
-  return JSON.parse(data.summary)
+  if (!data?.value) return null
+  return data.value
 }
 
 async function refreshAccessToken(supabase, tokens) {
@@ -30,13 +30,14 @@ async function refreshAccessToken(supabase, tokens) {
 
   const updated = {
     access_token: newTokens.access_token,
-    refresh_token: tokens.refresh_token, // refresh token doesn't change
+    refresh_token: tokens.refresh_token,
     expires_at: Date.now() + (newTokens.expires_in * 1000),
   }
 
-  await supabase.from('sessions').update({
-    summary: JSON.stringify(updated),
-  }).eq('id', '00000000-0000-0000-0000-000000000001')
+  await supabase.from('settings').update({
+    value: updated,
+    updated_at: new Date().toISOString(),
+  }).eq('key', 'google_tokens')
 
   return updated
 }

@@ -36,22 +36,18 @@ export async function GET(request) {
       return NextResponse.redirect(new URL('/?google_auth=token_error', request.url))
     }
 
-    // Store tokens in Supabase (simple key-value in a settings row)
+    // Store tokens in Supabase settings table
     const supabase = createServerClient()
 
-    // Use a simple approach — store in a settings-like table or reuse sessions
-    // For now, store as a special session entry
-    await supabase.from('sessions').upsert({
-      id: '00000000-0000-0000-0000-000000000001', // fixed ID for google tokens
-      author: 'System',
-      action: 'google_oauth',
-      entity_type: 'settings',
-      summary: JSON.stringify({
+    await supabase.from('settings').upsert({
+      key: 'google_tokens',
+      value: {
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         expires_at: Date.now() + (tokens.expires_in * 1000),
-      }),
-    }, { onConflict: 'id' })
+      },
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' })
 
     // Redirect back to the app
     const frontendUrl = process.env.FRONTEND_URL || 'https://discovery-hub-fe.vercel.app'
