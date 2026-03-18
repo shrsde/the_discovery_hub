@@ -41,6 +41,29 @@ export async function POST(request) {
     summary: `Meeting: ${record.title}`,
   })
 
+  // Auto-send Fireflies bot to join the meeting
+  const ffKey = process.env.FIREFLIES_API_KEY
+  if (ffKey && data.meet_link) {
+    try {
+      await fetch('https://api.fireflies.ai/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${ffKey}`,
+        },
+        body: JSON.stringify({
+          query: `mutation AddToLiveMeeting($meetLink: String!) {
+            addToLiveMeeting(meeting_link: $meetLink) {
+              success
+              message
+            }
+          }`,
+          variables: { meetLink: data.meet_link },
+        }),
+      })
+    } catch (e) { console.error('Fireflies bot send failed:', e) }
+  }
+
   return NextResponse.json({ success: true, data })
 }
 
