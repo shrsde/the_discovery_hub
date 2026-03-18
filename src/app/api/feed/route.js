@@ -38,11 +38,25 @@ export async function POST(request) {
     generateDigest({ trigger_type: 'auto', requested_by: record.author }).catch(console.error)
   }
 
-  // Send email notifications for @mentions
+  // Create in-app notifications + email for @mentions
   if (record.tags && record.tags.length > 0) {
+    // In-app notifications
+    for (const tag of record.tags) {
+      if (tag === record.author) continue
+      try {
+        await supabase.from('notifications').insert({
+          recipient: tag,
+          author: record.author,
+          feed_id: data.id,
+          preview: (record.text || '').replace(/<[^>]*>/g, '').slice(0, 100),
+        })
+      } catch (e) { console.error('In-app notification failed:', e) }
+    }
+
+    // Email notifications
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ? request.url.split('/api/')[0] : ''
-      await fetch(`${baseUrl || 'http://localhost:3001'}/api/notify`, {
+      const baseUrl = request.url.split('/api/')[0]
+      await fetch(`${baseUrl}/api/notify`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -55,7 +69,7 @@ export async function POST(request) {
           type: record.type,
         }),
       })
-    } catch (e) { console.error('Notification failed:', e) }
+    } catch (e) { console.error('Email notification failed:', e) }
   }
 
   return NextResponse.json({ success: true, data })
