@@ -16,20 +16,22 @@ export async function POST(request) {
     organizer: body.organizer,
     scheduled_at: body.scheduled_at || body.scheduledAt || null,
     attendees: body.attendees || ['Wes', 'Gibb'],
-    meet_link: 'https://meet.google.com/new',
+    meet_link: body.meet_link || body.meetLink || 'https://meet.google.com/new',
     status: 'scheduled',
   }
 
   const { data, error } = await supabase.from('meetings').insert(record).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-  // Also post to feed
+  // Also post to feed with meet link
   try {
     await supabase.from('feed').insert({
       author: record.organizer,
       type: 'meeting',
       text: `Scheduled meeting: ${record.title}`,
       tags: record.attendees,
+      media_url: record.meet_link,
+      media_type: 'video_link',
     })
   } catch (e) { console.error('Feed post failed:', e) }
 
