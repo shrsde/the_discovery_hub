@@ -11,12 +11,33 @@ export async function POST(request) {
   const body = await request.json()
   const supabase = createServerClient()
 
+  // Auto-generate Google Meet link if not provided
+  let meetLink = body.meet_link || body.meetLink || null
+
+  if (!meetLink) {
+    try {
+      const baseUrl = request.url.split('/api/')[0]
+      const meetRes = await fetch(`${baseUrl}/api/meetings/create-meet`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': request.headers.get('authorization') || '',
+        },
+        body: JSON.stringify({ title: body.title }),
+      })
+      const meetData = await meetRes.json()
+      if (meetData.success && meetData.meetLink) {
+        meetLink = meetData.meetLink
+      }
+    } catch (e) { console.error('Auto Meet link failed:', e) }
+  }
+
   const record = {
     title: body.title,
     organizer: body.organizer,
     scheduled_at: body.scheduled_at || body.scheduledAt || null,
     attendees: body.attendees || ['Wes', 'Gibb'],
-    meet_link: body.meet_link || body.meetLink || 'https://meet.google.com/new',
+    meet_link: meetLink || 'https://meet.google.com/new',
     status: 'scheduled',
   }
 
