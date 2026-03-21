@@ -100,18 +100,30 @@ export async function POST(request) {
     const supabase = createServerClient()
     const summaryText = `Participants: ${participants.join(', ')} | Duration: ${duration}\n\n${aiSummary}`
 
-    // Find the meeting record — try matching by title, then fall back to most recent
+    // Find the meeting record — try matching by meet_link from Fireflies meeting URL, then by title
+    const meetTitle = (transcript.title || '').toLowerCase()
+
     const { data: allMeetings } = await supabase
       .from('meetings')
       .select('id, title, meet_link')
-      .eq('status', 'scheduled')
+      .in('status', ['scheduled', 'in_progress'])
       .order('created_at', { ascending: false })
-      .limit(10)
+      .limit(20)
 
-    const meetTitle = (transcript.title || '').toLowerCase()
-    const matchedMeeting = allMeetings?.find(m =>
-      meetTitle.includes(m.title?.toLowerCase()) || m.title?.toLowerCase().includes(meetTitle)
-    ) || allMeetings?.[0]
+    // First try: match by meet_link if Fireflies provides it in the transcript
+    let matchedMeeting = null
+    if (body.meeting_url || body.meetingLink) {
+      const webhookMeetUrl = body.meeting_url || body.meetingLink
+      matchedMeeting = allMeetings?.find(m => m.meet_link && webhookMeetUrl.includes(m.meet_link))
+    }
+    // Second try: match by title similarity
+    if (!matchedMeeting) {
+      matchedMeeting = allMeetings?.find(m =>
+        meetTitle.includes(m.title?.toLowerCase()) || m.title?.toLowerCase().includes(meetTitle)
+      )
+    }
+    // Last resort: most recent scheduled meeting
+    if (!matchedMeeting) matchedMeeting = allMeetings?.[0]
 
     if (matchedMeeting) {
       await supabase
@@ -253,6 +265,45 @@ Guidelines:
             .eq('id', existingInterview.id)
 
           console.log('Linked interview updated with extracted data:', existingInterview.id)
+
+          // Create a feed post for the completed interview
+          const interviewSummary = extractedFields.biggest_signal
+            || (extractedFields.pain_points?.[0]?.description)
+            || aiSummary.slice(0, 200)
+          const interviewAuthor = existingInterview.interviewer || participants[0] || 'Wes'
+
+          try {
+            await supabase.from('feed').insert({
+              author: interviewAuthor,
+              type: 'insight',
+              text: `<strong>Interview completed: ${existingInterview.interviewee_name || extractedFields.interviewee_name || 'Unknown'}</strong> (${existingInterview.company || extractedFields.company || 'Unknown'})<br><br>${interviewSummary}`,
+              tags: ['Wes', 'Gibb'].filter(n => n !== interviewAuthor),
+              summary: `Interview auto-transcribed and processed. ${extractedFields.pain_points?.length || 0} pain points extracted.`,
+              linked_interview_id: existingInterview.id,
+            })
+          } catch (e) { console.error('Interview feed post failed:', e) }
+
+          // Notify both users
+          try {
+            const otherUser = interviewAuthor === 'Wes' ? 'Gibb' : 'Wes'
+            await supabase.from('notifications').insert({
+              recipient: otherUser,
+              author: 'System',
+              feed_id: null,
+              preview: `Interview with ${existingInterview.interviewee_name || extractedFields.interviewee_name || 'Unknown'} transcribed and processed`,
+            })
+            const { sendPushToUser } = await import('@/lib/push')
+            await sendPushToUser(otherUser, {
+              title: 'Interview completed',
+              body: `${existingInterview.interviewee_name || extractedFields.interviewee_name || 'Unknown'} at ${existingInterview.company || extractedFields.company || 'Unknown'} — transcript processed`,
+              url: `/interviews/${existingInterview.id}`,
+            })
+            await sendPushToUser(interviewAuthor, {
+              title: 'Interview transcribed',
+              body: `Your interview with ${existingInterview.interviewee_name || extractedFields.interviewee_name || 'Unknown'} has been processed`,
+              url: `/interviews/${existingInterview.id}`,
+            })
+          } catch (e) { console.error('Interview notification failed:', e) }
         }
       }
     }

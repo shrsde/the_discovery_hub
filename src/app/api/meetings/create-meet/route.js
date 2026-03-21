@@ -84,6 +84,7 @@ export async function POST(request) {
         attendees: [
           { email: 'wes@shrsde.com' },
           { email: 'gibbanella1@gmail.com' },
+          { email: process.env.FIREFLIES_BOT_EMAIL || 'fred@fireflies.ai' },
         ],
         guestsCanModify: true,
         conferenceData: {
