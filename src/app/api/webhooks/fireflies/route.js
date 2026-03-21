@@ -308,7 +308,14 @@ Guidelines:
       }
     }
 
-    // Find the matching feed post and update it
+    // Build a rich feed post for the completed meeting
+    const meetingTitle = transcript.title || matchedMeeting?.title || 'Untitled Meeting'
+    const attendeeTags = ['Wes', 'Gibb'] // tag both so they're notified
+    const organizer = matchedMeeting
+      ? (await supabase.from('meetings').select('organizer').eq('id', matchedMeeting.id).single())?.data?.organizer || 'Wes'
+      : participants[0] || 'Wes'
+
+    // Find existing "Scheduled meeting" feed post and update it into a completed post
     const { data: feedPosts } = await supabase
       .from('feed')
       .select('id, text')
@@ -317,33 +324,61 @@ Guidelines:
       .order('created_at', { ascending: false })
       .limit(5)
 
-    // Try to match feed post by title
     const matchedFeed = feedPosts?.find(f =>
       f.text?.toLowerCase().includes(meetTitle) || meetTitle.includes(f.text?.toLowerCase()?.replace('scheduled meeting: ', ''))
     ) || feedPosts?.[0]
 
+    const meetingPostText = `<strong>Meeting completed: ${meetingTitle}</strong><br><br>` +
+      `<em>${duration} · ${participants.join(', ')}</em><br><br>` +
+      aiSummary.slice(0, 500)
+
     if (matchedFeed) {
       await supabase
         .from('feed')
-        .update({ summary: summaryText })
+        .update({
+          text: meetingPostText,
+          summary: summaryText,
+          tags: attendeeTags,
+        })
         .eq('id', matchedFeed.id)
     } else {
-      // No existing feed post — create one
       await supabase.from('feed').insert({
-        author: participants[0] || 'Wes',
+        author: organizer,
         type: 'meeting',
-        text: `Meeting completed: ${transcript.title || 'Untitled'}`,
+        text: meetingPostText,
         summary: summaryText,
-        tags: participants.filter(p => ['Wes', 'Gibb'].includes(p)),
+        tags: attendeeTags,
       })
     }
+
+    // Notify + push for meeting completion
+    try {
+      const otherUser = organizer === 'Wes' ? 'Gibb' : 'Wes'
+      await supabase.from('notifications').insert({
+        recipient: otherUser,
+        author: organizer,
+        preview: `Meeting "${meetingTitle}" transcribed — ${duration}`,
+      })
+      const { sendPushToUser } = await import('@/lib/push')
+      await sendPushToUser(otherUser, {
+        title: `Meeting transcribed: ${meetingTitle}`,
+        body: `${duration} · ${participants.join(', ')}`,
+        url: '/feed',
+      })
+      await sendPushToUser(organizer, {
+        title: `Your meeting was transcribed`,
+        body: `${meetingTitle} — ${duration}`,
+        url: '/feed',
+      })
+    } catch (e) { console.error('Meeting notification failed:', e) }
 
     // Log the session
     await supabase.from('sessions').insert({
       author: 'System',
       action: 'meeting_transcribed',
       entity_type: 'meeting',
-      summary: `Auto-transcribed: ${transcript.title || 'Meeting'} (${duration}, ${participants.length} participants)`,
+      entity_id: matchedMeeting?.id || null,
+      summary: `Auto-transcribed: ${meetingTitle} (${duration}, ${participants.length} participants)`,
     }).catch(() => {})
 
     console.log('Fireflies webhook processed successfully:', transcript.title)
