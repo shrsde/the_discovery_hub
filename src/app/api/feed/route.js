@@ -26,6 +26,24 @@ export async function POST(request) {
   const { data, error } = await supabase.from('feed').insert(record).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
+  // AI-generate thread category tag
+  if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      const Anthropic = (await import('@anthropic-ai/sdk')).default
+      const client = new Anthropic()
+      const msg = await client.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 30,
+        messages: [{ role: 'user', content: `Categorize this post into a short tag (1-3 words, lowercase). Examples: "market research", "product idea", "competitor intel", "user feedback", "team sync", "action item", "industry news", "pain point", "opportunity". Reply with ONLY the tag.\n\n"${record.text.replace(/<[^>]*>/g, '').slice(0, 300)}"` }],
+      })
+      const tag = msg.content[0].text.trim().toLowerCase()
+      if (tag.length < 30) {
+        await supabase.from('feed').update({ thread_tag: tag }).eq('id', data.id)
+        data.thread_tag = tag
+      }
+    } catch (e) { console.error('Thread tag generation failed:', e) }
+  }
+
   await logSession(supabase, {
     author: record.author,
     action: 'posted_feed',
