@@ -53,6 +53,19 @@ export async function POST(request) {
       } catch (e) { console.error('In-app notification failed:', e) }
     }
 
+    // Push notifications for tagged users
+    for (const tag of record.tags) {
+      if (tag === record.author) continue
+      try {
+        const { sendPushToUser } = await import('@/lib/push')
+        await sendPushToUser(tag, {
+          title: `${record.author} mentioned you`,
+          body: (record.text || '').replace(/<[^>]*>/g, '').slice(0, 120),
+          url: '/feed',
+        })
+      } catch (e) { console.error('Push notification failed:', e) }
+    }
+
     // Email notifications
     try {
       const baseUrl = request.url.split('/api/')[0]
@@ -71,6 +84,17 @@ export async function POST(request) {
       })
     } catch (e) { console.error('Email notification failed:', e) }
   }
+
+  // Push notification to the other user for ALL posts
+  const otherUser = record.author === 'Wes' ? 'Gibb' : 'Wes'
+  try {
+    const { sendPushToUser } = await import('@/lib/push')
+    await sendPushToUser(otherUser, {
+      title: `${record.author} posted a ${record.type}`,
+      body: (record.text || '').replace(/<[^>]*>/g, '').slice(0, 120),
+      url: '/feed',
+    })
+  } catch (e) { console.error('Push failed:', e) }
 
   return NextResponse.json({ success: true, data })
 }

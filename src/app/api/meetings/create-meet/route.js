@@ -71,7 +71,7 @@ export async function POST(request) {
     const start = now.toISOString()
     const end = new Date(now.getTime() + 60 * 60 * 1000).toISOString() // 1 hour
 
-    const calRes = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1', {
+    const calRes = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1&sendUpdates=all', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -81,6 +81,11 @@ export async function POST(request) {
         summary: title,
         start: { dateTime: start },
         end: { dateTime: end },
+        attendees: [
+          { email: 'wes@shrsde.com' },
+          { email: 'gibbanella1@gmail.com' },
+        ],
+        guestsCanModify: true,
         conferenceData: {
           createRequest: {
             requestId: `dh-${Date.now()}`,
