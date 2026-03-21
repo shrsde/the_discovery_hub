@@ -71,16 +71,72 @@ export async function POST(request) {
 
   if (result.error) return NextResponse.json({ error: result.error.message }, { status: 400 })
 
+  const interviewData = result.data
+
   await logSession(supabase, {
     author: record.interviewer || 'unknown',
     action: body.id ? 'updated_interview' : 'created_interview',
     entity_type: 'interview',
-    entity_id: result.data.id,
+    entity_id: interviewData.id,
     summary: `${body.id ? 'Updated' : 'New'} interview: ${record.company} / ${record.interviewee_name}`
   })
 
+  // When an interview is marked completed, create a feed post
+  if (body.id && record.status === 'completed') {
+    try {
+      // Check if a feed post for this interview already exists
+      const { data: existingPosts } = await supabase
+        .from('feed')
+        .select('id')
+        .eq('linked_interview_id', interviewData.id)
+        .limit(1)
+
+      if (!existingPosts || existingPosts.length === 0) {
+        const name = interviewData.interviewee_name || 'Unknown'
+        const company = interviewData.company || 'Unknown'
+        const signal = interviewData.biggest_signal || ''
+        const painPoints = Array.isArray(interviewData.pain_points) ? interviewData.pain_points : []
+        const painSummary = painPoints.slice(0, 3).map(p => p.description || p).join('; ')
+        const quotes = (interviewData.verbatim_quotes || '').split('\n').filter(Boolean).slice(0, 2).join(' | ')
+        const interviewer = interviewData.interviewer || 'Wes'
+
+        let summaryParts = []
+        if (signal) summaryParts.push(signal)
+        if (painSummary) summaryParts.push(`Pain points: ${painSummary}`)
+        if (quotes) summaryParts.push(`"${quotes}"`)
+        const summaryText = summaryParts.join('\n\n') || 'Interview completed.'
+
+        await supabase.from('feed').insert({
+          author: interviewer,
+          type: 'insight',
+          text: `<strong>Interview completed: ${name}</strong> — ${company}`,
+          tags: ['Wes', 'Gibb'].filter(n => n !== interviewer),
+          summary: summaryText,
+          linked_interview_id: interviewData.id,
+        })
+
+        // Notify the other user
+        const otherUser = interviewer === 'Wes' ? 'Gibb' : 'Wes'
+        await supabase.from('notifications').insert({
+          recipient: otherUser,
+          author: interviewer,
+          preview: `Interview with ${name} at ${company} completed`,
+        }).catch(() => {})
+
+        try {
+          const { sendPushToUser } = await import('@/lib/push')
+          await sendPushToUser(otherUser, {
+            title: `Interview completed: ${name}`,
+            body: `${company} — ${signal || 'View details'}`,
+            url: `/interviews/${interviewData.id}`,
+          })
+        } catch (e) { console.error('Push failed:', e) }
+      }
+    } catch (e) { console.error('Interview feed post failed:', e) }
+  }
+
   generateDigest({ trigger_type: 'auto', requested_by: record.interviewer }).catch(console.error)
-  return NextResponse.json({ success: true, data: result.data })
+  return NextResponse.json({ success: true, data: interviewData })
 }
 
 export async function GET(request) {
