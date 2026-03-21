@@ -57,6 +57,33 @@ export async function POST(request) {
     status: body.status || 'completed',
     scheduled_at: pick('scheduledAt', 'scheduled_at'),
     meet_link: pick('meetLink', 'meet_link'),
+    // Org profile fields
+    org_type: body.org_type,
+    annual_revenue: body.annual_revenue,
+    channel_mix: body.channel_mix,
+    tech_stack: body.tech_stack,
+    tech_stack_other: body.tech_stack_other,
+    org_headcount: body.org_headcount,
+    brokers: body.brokers,
+    supply_chain_product: body.supply_chain_product,
+    distribution_models: body.distribution_models,
+    // Broker fields
+    broker_channel_focus: body.broker_channel_focus,
+    broker_primary_account: body.broker_primary_account,
+    broker_client_count: body.broker_client_count,
+    broker_client_size: body.broker_client_size,
+    broker_geographic: body.broker_geographic,
+    // Distributor fields
+    distributor_channel: body.distributor_channel,
+    distributor_type: body.distributor_type,
+    // Internal notes
+    internal_notes_details: body.internal_notes_details,
+    internal_notes_org: body.internal_notes_org,
+    internal_notes_workflow: body.internal_notes_workflow,
+    internal_notes_pain: body.internal_notes_pain,
+    internal_notes_solution: body.internal_notes_solution,
+    internal_notes_quotes: body.internal_notes_quotes,
+    internal_notes_assessment: body.internal_notes_assessment,
   }
 
   // Remove null values so Supabase uses defaults
