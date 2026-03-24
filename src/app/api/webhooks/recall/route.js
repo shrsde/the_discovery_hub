@@ -29,8 +29,8 @@ export async function POST(request) {
     const botId = eventData?.bot?.id
     console.log('Recall webhook received:', { event, botId })
 
-    // Only process transcript completion events
-    if (event !== 'transcript.done' && event !== 'bot.done') {
+    // Only process transcript completion — bot.done fires too early (before transcript is ready)
+    if (event !== 'transcript.done') {
       return NextResponse.json({ ok: true, skipped: true })
     }
     if (!botId) return NextResponse.json({ ok: true, skipped: true })
