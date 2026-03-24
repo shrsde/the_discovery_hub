@@ -344,8 +344,12 @@ Guidelines:
 
     // Build structured HTML feed post
     const s = structuredSummary
-    let meetingPostText = `<strong>Meeting completed: ${meetingTitle}</strong><br>` +
-      `<em>${duration} · ${participants.join(', ')}</em><br><br>`
+    const knownParticipants = participants.filter(p => p && p !== 'Unknown')
+    const metaParts = [duration !== 'Unknown' ? duration : null, knownParticipants.length ? knownParticipants.join(', ') : null].filter(Boolean)
+
+    let meetingPostText = `<strong>Meeting completed: ${meetingTitle}</strong>`
+    if (metaParts.length) meetingPostText += `<br><em>${metaParts.join(' · ')}</em>`
+    meetingPostText += `<br><br>`
 
     if (s) {
       if (s.summary) meetingPostText += `<p>${s.summary}</p>`
@@ -355,10 +359,6 @@ Guidelines:
       if (s.next_steps?.length) meetingPostText += `<p><strong>Next Steps</strong></p><ul>${s.next_steps.map(n => `<li>${n}</li>`).join('')}</ul>`
     } else if (aiSummary) {
       meetingPostText += `<p>${aiSummary.slice(0, 500)}</p>`
-    }
-
-    if (recordingUrl) {
-      meetingPostText += `<p><a href="${recordingUrl}" target="_blank">View Recording</a></p>`
     }
 
     // Store meeting ID and recording URL in summary for frontend access
