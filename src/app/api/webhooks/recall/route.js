@@ -318,7 +318,7 @@ Guidelines:
       aiSummary.slice(0, 500)
 
     if (matchedFeed) {
-      await supabase
+      const { error: feedUpdateErr } = await supabase
         .from('feed')
         .update({
           text: meetingPostText,
@@ -326,14 +326,17 @@ Guidelines:
           tags: attendeeTags,
         })
         .eq('id', matchedFeed.id)
+      if (feedUpdateErr) console.error('Feed update failed:', feedUpdateErr)
     } else {
-      await supabase.from('feed').insert({
-        author: organizer,
+      const { error: feedInsertErr } = await supabase.from('feed').insert({
+        author: organizer || 'Wes',
         type: 'meeting',
         text: meetingPostText,
         summary: summaryText,
         tags: attendeeTags,
       })
+      if (feedInsertErr) console.error('Feed insert failed:', feedInsertErr)
+      else console.log('Feed post created for meeting:', meetingTitle)
     }
 
     // Notify + push for meeting completion
