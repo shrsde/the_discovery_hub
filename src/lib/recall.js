@@ -33,7 +33,11 @@ export async function getBot(botId) {
 }
 
 export async function getBotTranscript(botId) {
-  return recallFetch('GET', `/bot/${botId}/transcript`)
+  return recallFetch('GET', `/bot/${botId}/transcript/`)
+}
+
+export async function getTranscriptById(transcriptId) {
+  return recallFetch('GET', `/transcript/${transcriptId}/`)
 }
 
 export async function removeBot(botId) {

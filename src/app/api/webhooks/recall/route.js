@@ -36,24 +36,47 @@ export async function POST(request) {
     if (!botId) return NextResponse.json({ ok: true, skipped: true })
 
     // Fetch transcript from Recall.ai
-    const { getBotTranscript, getBot } = await import('@/lib/recall')
+    const { getTranscriptById, getBot } = await import('@/lib/recall')
+    const transcriptId = eventData?.transcript?.id
 
-    const [botInfo, transcript] = await Promise.all([
-      getBot(botId),
-      getBotTranscript(botId),
-    ])
+    const botInfo = await getBot(botId)
 
-    if (!transcript || transcript.length === 0) {
+    // Get transcript — use transcript ID from webhook payload
+    let transcriptData = null
+    if (transcriptId) {
+      try {
+        transcriptData = await getTranscriptById(transcriptId)
+      } catch (e) {
+        console.error('Transcript fetch by ID failed:', e)
+      }
+    }
+
+    if (!transcriptData) {
       console.error('No transcript found for bot:', botId)
       return NextResponse.json({ error: 'Transcript not found' }, { status: 404 })
     }
 
+    // New API returns { id, data: { download_url } } — fetch the actual transcript data
+    let transcriptEntries = []
+    if (transcriptData.data?.download_url) {
+      const dlRes = await fetch(transcriptData.data.download_url)
+      transcriptEntries = await dlRes.json()
+    } else if (Array.isArray(transcriptData)) {
+      // Fallback: direct array response
+      transcriptEntries = transcriptData
+    }
+
+    if (!transcriptEntries || transcriptEntries.length === 0) {
+      console.error('Empty transcript for bot:', botId)
+      return NextResponse.json({ error: 'Transcript empty' }, { status: 404 })
+    }
+
     // Format transcript text — Recall returns array of { speaker, words: [{ text }] }
-    const fullText = transcript
+    const fullText = transcriptEntries
       .map(entry => `${entry.speaker || 'Unknown'}: ${(entry.words || []).map(w => w.text).join(' ')}`)
       .join('\n')
 
-    const participants = [...new Set(transcript.map(e => e.speaker).filter(Boolean))]
+    const participants = [...new Set(transcriptEntries.map(e => e.speaker).filter(Boolean))]
     const duration = botInfo.meeting_metadata?.duration
       ? `${Math.round(botInfo.meeting_metadata.duration / 60)} min`
       : 'Unknown'
