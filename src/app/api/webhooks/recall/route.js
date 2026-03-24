@@ -26,14 +26,13 @@ export async function POST(request) {
     const body = JSON.parse(rawBody)
     const { event, data: eventData } = body
 
-    console.log('Recall webhook received:', { event, botId: eventData?.bot_id })
+    const botId = eventData?.bot?.id
+    console.log('Recall webhook received:', { event, botId })
 
     // Only process transcript completion events
     if (event !== 'transcript.done' && event !== 'bot.done') {
       return NextResponse.json({ ok: true, skipped: true })
     }
-
-    const botId = eventData?.bot_id
     if (!botId) return NextResponse.json({ ok: true, skipped: true })
 
     // Fetch transcript from Recall.ai
