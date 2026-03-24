@@ -81,22 +81,49 @@ export async function POST(request) {
       ? `${Math.round(botInfo.meeting_metadata.duration / 60)} min`
       : 'Unknown'
 
-    // Generate AI summary with Claude
+    // Generate structured AI summary with Claude
     let aiSummary = ''
+    let structuredSummary = null
     if (fullText && process.env.ANTHROPIC_API_KEY) {
       try {
         const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
         const res = await anthropic.messages.create({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 1500,
-          system: 'You are summarizing a meeting between co-founders doing CPG industry discovery research. Extract: key decisions, action items (with owner: Wes or Gibb), insights, and next steps. Be concise and actionable.',
+          max_tokens: 2000,
+          system: `You are summarizing a meeting between co-founders doing CPG industry discovery research. Return ONLY valid JSON with this structure:
+
+{
+  "summary": "2-3 sentence high-level summary of what was discussed and accomplished",
+  "decisions": ["Decision 1", "Decision 2"],
+  "insights": ["Insight 1", "Insight 2"],
+  "action_items": ["(Wes) Do X by Friday", "(Gibb) Research Y"],
+  "next_steps": ["Next step 1", "Next step 2"]
+}
+
+Rules:
+- Keep each bullet concise (1 sentence max)
+- Prefix action items with the owner in parentheses: (Wes) or (Gibb)
+- Use empty arrays [] for sections with nothing to report
+- Return ONLY valid JSON, no markdown, no explanation`,
           messages: [{ role: 'user', content: `Meeting transcript:\n\n${fullText.slice(0, 15000)}` }],
         })
-        aiSummary = res.content[0].text
+        const rawText = res.content[0].text
+        try {
+          const cleaned = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+          structuredSummary = JSON.parse(cleaned)
+          aiSummary = structuredSummary.summary || ''
+        } catch (parseErr) {
+          console.error('Failed to parse structured summary:', parseErr)
+          aiSummary = rawText
+        }
       } catch (e) {
         console.error('Claude summary failed:', e)
       }
     }
+
+    // Get recording URL from Recall bot info
+    const recordingUrl = botInfo.recordings?.[0]?.media_shortcuts?.video?.url
+      || botInfo.video_url || null
 
     const supabase = createServerClient()
     const summaryText = `Participants: ${participants.join(', ')} | Duration: ${duration}\n\n${aiSummary}`
@@ -114,13 +141,15 @@ export async function POST(request) {
     }
 
     // Update meeting record
+    const meetingUpdate = {
+      status: 'completed',
+      transcript: fullText,
+      parsed_summary: aiSummary,
+    }
+    if (recordingUrl) meetingUpdate.recording_url = recordingUrl
     await supabase
       .from('meetings')
-      .update({
-        status: 'completed',
-        transcript: fullText,
-        parsed_summary: aiSummary,
-      })
+      .update(meetingUpdate)
       .eq('id', matchedMeeting.id)
 
     // Find linked interview by meet_link and update with transcript summary + extracted data
@@ -313,16 +342,34 @@ Guidelines:
       f.text?.toLowerCase().includes(meetTitleLower) || meetTitleLower.includes(f.text?.toLowerCase()?.replace('scheduled meeting: ', ''))
     ) || feedPosts?.[0]
 
-    const meetingPostText = `<strong>Meeting completed: ${meetingTitle}</strong><br><br>` +
-      `<em>${duration} · ${participants.join(', ')}</em><br><br>` +
-      aiSummary.slice(0, 500)
+    // Build structured HTML feed post
+    const s = structuredSummary
+    let meetingPostText = `<strong>Meeting completed: ${meetingTitle}</strong><br>` +
+      `<em>${duration} · ${participants.join(', ')}</em><br><br>`
+
+    if (s) {
+      if (s.summary) meetingPostText += `<p>${s.summary}</p>`
+      if (s.decisions?.length) meetingPostText += `<p><strong>Decisions</strong></p><ul>${s.decisions.map(d => `<li>${d}</li>`).join('')}</ul>`
+      if (s.insights?.length) meetingPostText += `<p><strong>Insights</strong></p><ul>${s.insights.map(i => `<li>${i}</li>`).join('')}</ul>`
+      if (s.action_items?.length) meetingPostText += `<p><strong>Action Items</strong></p><ul>${s.action_items.map(a => `<li>${a}</li>`).join('')}</ul>`
+      if (s.next_steps?.length) meetingPostText += `<p><strong>Next Steps</strong></p><ul>${s.next_steps.map(n => `<li>${n}</li>`).join('')}</ul>`
+    } else if (aiSummary) {
+      meetingPostText += `<p>${aiSummary.slice(0, 500)}</p>`
+    }
+
+    if (recordingUrl) {
+      meetingPostText += `<p><a href="${recordingUrl}" target="_blank">View Recording</a></p>`
+    }
+
+    // Store meeting ID and recording URL in summary for frontend access
+    const feedSummary = `Participants: ${participants.join(', ')} | Duration: ${duration}\nMeeting ID: ${matchedMeeting.id}${recordingUrl ? `\nRecording: ${recordingUrl}` : ''}\n\n${aiSummary}`
 
     if (matchedFeed) {
       const { error: feedUpdateErr } = await supabase
         .from('feed')
         .update({
           text: meetingPostText,
-          summary: summaryText,
+          summary: feedSummary,
           tags: attendeeTags,
         })
         .eq('id', matchedFeed.id)
@@ -332,7 +379,7 @@ Guidelines:
         author: organizer || 'Wes',
         type: 'insight',
         text: meetingPostText,
-        summary: summaryText,
+        summary: feedSummary,
         tags: attendeeTags,
       })
       if (feedInsertErr) console.error('Feed insert failed:', feedInsertErr)
