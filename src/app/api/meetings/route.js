@@ -48,7 +48,7 @@ export async function POST(request) {
   try {
     await supabase.from('feed').insert({
       author: record.organizer,
-      type: 'meeting',
+      type: 'insight',
       text: `Scheduled meeting: ${record.title}`,
       tags: record.attendees,
       media_url: record.meet_link,

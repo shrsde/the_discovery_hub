@@ -303,7 +303,7 @@ Guidelines:
     const { data: feedPosts } = await supabase
       .from('feed')
       .select('id, text')
-      .eq('type', 'meeting')
+      .eq('type', 'insight')
       .is('summary', null)
       .order('created_at', { ascending: false })
       .limit(5)
@@ -330,7 +330,7 @@ Guidelines:
     } else {
       const { error: feedInsertErr } = await supabase.from('feed').insert({
         author: organizer || 'Wes',
-        type: 'meeting',
+        type: 'insight',
         text: meetingPostText,
         summary: summaryText,
         tags: attendeeTags,
