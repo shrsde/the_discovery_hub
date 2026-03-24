@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server'
 import { authenticateRequest } from '@/lib/auth'
-
-// Fireflies.ai GraphQL API
-const FIREFLIES_API = 'https://api.fireflies.ai/graphql'
+import { createServerClient } from '@/lib/supabase'
 
 export async function POST(request) {
   const auth = authenticateRequest(request)
@@ -10,130 +8,63 @@ export async function POST(request) {
   if (auth.preflight) return new NextResponse(null, { status: 204 })
 
   try {
-    const { action, meetLink, meetingId } = await request.json()
-    const ffKey = process.env.FIREFLIES_API_KEY
-    if (!ffKey) return NextResponse.json({ error: 'FIREFLIES_API_KEY not configured' }, { status: 500 })
+    const { action, meetingId } = await request.json()
+    if (!process.env.RECALLAI_API_KEY) return NextResponse.json({ error: 'RECALLAI_API_KEY not configured' }, { status: 500 })
 
-    if (action === 'join') {
-      // Send Fireflies bot to join a Google Meet call
-      if (!meetLink) return NextResponse.json({ error: 'Missing meetLink' }, { status: 400 })
+    const { getBot, getBotTranscript, removeBot } = await import('@/lib/recall')
 
-      const res = await fetch(FIREFLIES_API, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ffKey}`,
-        },
-        body: JSON.stringify({
-          query: `mutation AddToLiveMeeting($meetLink: String!) {
-            addToLiveMeeting(meeting_link: $meetLink) {
-              success
-              message
-            }
-          }`,
-          variables: { meetLink },
-        }),
-      })
-
-      const result = await res.json()
-      if (result.errors) {
-        return NextResponse.json({ error: result.errors[0]?.message || 'Fireflies error' }, { status: 400 })
-      }
-
-      return NextResponse.json({ success: true, data: result.data?.addToLiveMeeting })
+    // Look up recall_bot_id from meeting record
+    let botId = null
+    if (meetingId) {
+      const supabase = createServerClient()
+      const { data: meeting } = await supabase
+        .from('meetings')
+        .select('recall_bot_id')
+        .eq('id', meetingId)
+        .single()
+      botId = meeting?.recall_bot_id
     }
 
-    if (action === 'get_transcript') {
-      // Get transcript for a specific meeting from Fireflies
-      if (!meetingId) return NextResponse.json({ error: 'Missing meetingId' }, { status: 400 })
+    if (!botId) return NextResponse.json({ error: 'No Recall bot found for this meeting' }, { status: 404 })
 
-      const res = await fetch(FIREFLIES_API, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ffKey}`,
+    if (action === 'status') {
+      // Check bot status — is it in the meeting, recording, done, etc.
+      const bot = await getBot(botId)
+      return NextResponse.json({
+        success: true,
+        data: {
+          id: bot.id,
+          status: bot.status?.code || bot.status,
+          meetingUrl: bot.meeting_url,
+          joinedAt: bot.join_at,
+          metadata: bot.meeting_metadata || null,
         },
-        body: JSON.stringify({
-          query: `query Transcript($id: String!) {
-            transcript(id: $id) {
-              id
-              title
-              duration
-              participants
-              sentences {
-                text
-                speaker_name
-                start_time
-                end_time
-              }
-              summary {
-                overview
-                action_items
-                keywords
-              }
-            }
-          }`,
-          variables: { id: meetingId },
-        }),
       })
+    }
 
-      const result = await res.json()
-      if (result.errors) {
-        return NextResponse.json({ error: result.errors[0]?.message || 'Fireflies error' }, { status: 400 })
-      }
-
-      const transcript = result.data?.transcript
-      if (!transcript) return NextResponse.json({ error: 'Transcript not found' }, { status: 404 })
-
-      // Format transcript text
-      const fullText = (transcript.sentences || [])
-        .map(s => `${s.speaker_name}: ${s.text}`)
+    if (action === 'transcript') {
+      // Fetch transcript for the bot's recording
+      const transcript = await getBotTranscript(botId)
+      const fullText = (transcript || [])
+        .map(entry => `${entry.speaker || 'Unknown'}: ${(entry.words || []).map(w => w.text).join(' ')}`)
         .join('\n')
 
       return NextResponse.json({
         success: true,
         data: {
-          title: transcript.title,
-          duration: transcript.duration ? `${Math.round(transcript.duration / 60)} min` : null,
-          participants: transcript.participants || [],
           transcript: fullText,
-          summary: transcript.summary?.overview || null,
-          actionItems: transcript.summary?.action_items || null,
-          keywords: transcript.summary?.keywords || [],
+          speakers: [...new Set((transcript || []).map(e => e.speaker).filter(Boolean))],
         },
       })
     }
 
-    if (action === 'list_recent') {
-      // List recent transcripts from Fireflies
-      const res = await fetch(FIREFLIES_API, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ffKey}`,
-        },
-        body: JSON.stringify({
-          query: `query RecentTranscripts {
-            transcripts(limit: 10) {
-              id
-              title
-              date
-              duration
-              participants
-            }
-          }`,
-        }),
-      })
-
-      const result = await res.json()
-      if (result.errors) {
-        return NextResponse.json({ error: result.errors[0]?.message || 'Fireflies error' }, { status: 400 })
-      }
-
-      return NextResponse.json({ success: true, data: result.data?.transcripts || [] })
+    if (action === 'remove') {
+      // Remove bot from the call
+      await removeBot(botId)
+      return NextResponse.json({ success: true })
     }
 
-    return NextResponse.json({ error: 'Invalid action. Use: join, get_transcript, list_recent' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid action. Use: status, transcript, remove' }, { status: 400 })
   } catch (err) {
     console.error('Meeting bot error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
