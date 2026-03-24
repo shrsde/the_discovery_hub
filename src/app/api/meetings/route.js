@@ -85,9 +85,24 @@ export async function GET(request) {
   if (!auth.authenticated) return auth.response
 
   const supabase = createServerClient()
+  const { searchParams } = new URL(request.url)
+  const id = searchParams.get('id')
+
+  if (id) {
+    // Single meeting with full transcript
+    const { data, error } = await supabase
+      .from('meetings')
+      .select('*')
+      .eq('id', id)
+      .single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    return NextResponse.json({ data })
+  }
+
+  // List all meetings (exclude large transcript field for performance)
   const { data, error } = await supabase
     .from('meetings')
-    .select('*')
+    .select('id, title, organizer, scheduled_at, attendees, meet_link, status, recall_bot_id, parsed_summary, recording_url, created_at')
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
