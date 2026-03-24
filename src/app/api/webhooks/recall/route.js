@@ -358,13 +358,15 @@ Guidelines:
     } catch (e) { console.error('Meeting notification failed:', e) }
 
     // Log the session
-    await supabase.from('sessions').insert({
-      author: 'System',
-      action: 'meeting_transcribed',
-      entity_type: 'meeting',
-      entity_id: matchedMeeting.id,
-      summary: `Auto-transcribed: ${meetingTitle} (${duration}, ${participants.length} participants)`,
-    }).catch(() => {})
+    try {
+      await supabase.from('sessions').insert({
+        author: 'System',
+        action: 'meeting_transcribed',
+        entity_type: 'meeting',
+        entity_id: matchedMeeting.id,
+        summary: `Auto-transcribed: ${meetingTitle} (${duration}, ${participants.length} participants)`,
+      })
+    } catch (e) { console.error('Session log failed:', e) }
 
     console.log('Recall webhook processed successfully:', meetingTitle)
     return NextResponse.json({ success: true, title: meetingTitle })
