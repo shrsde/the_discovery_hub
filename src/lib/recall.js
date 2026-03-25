@@ -24,7 +24,12 @@ export async function createBot(meetingUrl, { botName, joinAt } = {}) {
       transcript: {
         provider: { meeting_captions: {} }
       }
-    }
+    },
+    automatic_leave: {
+      waiting_room_timeout: 600, // wait up to 10 min in waiting room
+      noone_joined_timeout: 600, // wait up to 10 min if no one has joined
+      everyone_left_timeout: 30,  // leave 30s after everyone leaves
+    },
   })
 }
 
