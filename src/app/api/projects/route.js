@@ -120,6 +120,8 @@ export async function POST(request) {
       title: body.title || null,
       url: body.url || null,
       notes: body.notes || null,
+      pinned: body.pinned || false,
+      folder_path: body.folder_path || null,
       added_by: body.added_by || 'Wes',
     }
 
@@ -145,6 +147,19 @@ export async function PATCH(request) {
 
   if (!body.id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
+  // Update a project item (pin, move folder, edit notes)
+  if (body.type === 'item') {
+    const itemUpdates = {}
+    if (body.pinned !== undefined) itemUpdates.pinned = body.pinned
+    if (body.folder_path !== undefined) itemUpdates.folder_path = body.folder_path
+    if (body.notes !== undefined) itemUpdates.notes = body.notes
+    if (body.title !== undefined) itemUpdates.title = body.title
+    const { data, error } = await supabase.from('project_items').update(itemUpdates).eq('id', body.id).select().single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    return NextResponse.json({ success: true, data })
+  }
+
+  // Update a project
   const updates = {}
   if (body.title !== undefined) updates.title = body.title
   if (body.description !== undefined) updates.description = body.description
