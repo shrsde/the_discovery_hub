@@ -20,6 +20,7 @@ export async function POST(request) {
     media_url: body.media_url || body.mediaUrl || null,
     media_type: body.media_type || body.mediaType || null,
     media_name: body.media_name || body.mediaName || null,
+    attachments: body.attachments || null,
     summary: body.summary || null,
   }
 
@@ -154,6 +155,7 @@ export async function PATCH(request) {
     updates.edited_at = new Date().toISOString()
   }
   if (body.type !== undefined) updates.type = body.type
+  if (body.attachments !== undefined) updates.attachments = body.attachments
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
