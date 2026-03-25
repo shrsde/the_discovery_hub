@@ -152,6 +152,7 @@ export async function PATCH(request) {
   if (body.public_url !== undefined) updates.public_url = body.public_url
   if (body.icon !== undefined) updates.icon = body.icon
   if (body.color !== undefined) updates.color = body.color
+  if (body.active !== undefined) updates.active = body.active
   updates.updated_at = new Date().toISOString()
 
   const { data, error } = await supabase.from('projects').update(updates).eq('id', body.id).select().single()
