@@ -23,7 +23,7 @@ export async function POST(request) {
           'Content-Type': 'application/json',
           'Authorization': request.headers.get('authorization') || '',
         },
-        body: JSON.stringify({ title: body.title }),
+        body: JSON.stringify({ title: body.title, attendees: body.attendees }),
       })
       const meetData = await meetRes.json()
       if (meetData.success && meetData.meetLink) {

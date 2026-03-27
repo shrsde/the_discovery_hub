@@ -48,8 +48,18 @@ export async function POST(request) {
   if (auth.preflight) return new NextResponse(null, { status: 204 })
 
   try {
-    const { title } = await request.json()
+    const { title, attendees } = await request.json()
     if (!title) return NextResponse.json({ error: 'Missing title' }, { status: 400 })
+
+    // Map display names to emails — only invite selected attendees
+    const EMAIL_MAP = {
+      'Wes': 'wes@shrsde.com',
+      'Gibb': 'gibbanella1@gmail.com',
+    }
+    const attendeeEmails = (attendees || ['Wes', 'Gibb'])
+      .map(name => EMAIL_MAP[name])
+      .filter(Boolean)
+      .map(email => ({ email }))
 
     const supabase = createServerClient()
     let tokens = await getGoogleTokens(supabase)
@@ -81,10 +91,7 @@ export async function POST(request) {
         summary: title,
         start: { dateTime: start },
         end: { dateTime: end },
-        attendees: [
-          { email: 'wes@shrsde.com' },
-          { email: 'gibbanella1@gmail.com' },
-        ],
+        attendees: attendeeEmails,
         guestsCanModify: true,
         conferenceData: {
           createRequest: {
