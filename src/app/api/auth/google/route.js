@@ -7,6 +7,7 @@ export async function GET() {
 
   const scopes = [
     'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/drive.file',
   ].join(' ')
 
   const url = `https://accounts.google.com/o/oauth2/v2/auth?` +
