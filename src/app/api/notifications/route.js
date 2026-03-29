@@ -70,12 +70,32 @@ export async function PATCH(request) {
   return NextResponse.json({ success: true })
 }
 
+// DELETE — delete specific notification or clear all for a user
+export async function DELETE(request) {
+  const auth = authenticateRequest(request)
+  if (!auth.authenticated) return auth.response
+  if (auth.preflight) return new NextResponse(null, { status: 204 })
+
+  const body = await request.json()
+  const supabase = createServerClient()
+
+  if (body.id) {
+    await supabase.from('notifications').delete().eq('id', body.id)
+  } else if (body.recipient) {
+    await supabase.from('notifications').delete().eq('recipient', body.recipient)
+  } else {
+    return NextResponse.json({ error: 'Missing id or recipient' }, { status: 400 })
+  }
+
+  return NextResponse.json({ success: true })
+}
+
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
     headers: {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
+      'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   })
