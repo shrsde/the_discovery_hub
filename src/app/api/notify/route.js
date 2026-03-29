@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { createServerClient } from '@/lib/supabase'
 import { authenticateRequest } from '@/lib/auth'
 
 const USER_EMAILS = {
@@ -19,14 +20,22 @@ export async function POST(request) {
     const resendKey = process.env.RESEND_API_KEY
     if (!resendKey) return NextResponse.json({ success: true, sent: 0, note: 'RESEND_API_KEY not configured' })
 
+    const supabase = createServerClient()
     let sent = 0
 
     for (const tag of tags) {
-      // Don't notify someone about their own post
       if (tag === author) continue
 
       const email = USER_EMAILS[tag]
       if (!email) continue
+
+      // Check if user has email notifications enabled
+      const { data: pref } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', `email_notifs_${tag}`)
+        .single()
+      if (pref?.value === false) continue
 
       const typeLabel = type === 'meeting' ? 'meeting' : type === 'action' ? 'action item' : 'post'
       const preview = (text || '').replace(/<[^>]*>/g, '').slice(0, 200)
